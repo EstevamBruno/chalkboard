@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  ownedClasses Class[]        @relation("ClassOwner")
+  memberships  Membership[]
+  invitations  Invitation[]   @relation("Invitee")
+  sentInvites  Invitation[]   @relation("Inviter")
+  boardEdits   BoardElement[] @relation("ElementAuthor")
+}
+
+model Class {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+
+  owner       User           @relation("ClassOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  memberships Membership[]
+  invitations Invitation[]
+  elements    BoardElement[]
+
+  @@index([ownerId])
+}
+
+model Membership {
+  id       String   @id @default(cuid())
+  userId   String
+  classId  String
+  role     String   @default("member") // "owner" | "member"
+  joinedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classId])
+  @@index([classId])
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  classId   String
+  inviteeId String
+  inviterId String
+  status    String   @default("pending") // "pending" | "accepted" | "declined"
+  createdAt DateTime @default(now())
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  invitee User  @relation("Invitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  inviter User  @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  // Only one pending row per (invitee, class) is enforced in application logic;
+  // this unique key prevents duplicate invitation records outright.
+  @@unique([classId, inviteeId])
+  @@index([inviteeId])
+}
+
+model BoardElement {
+  id        String   @id // client-generated element id
+  classId   String
+  type      String // "stroke" | "rect" | "ellipse" | "line" | "text"
+  data      Json
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  class  Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  author User  @relation("ElementAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+}
